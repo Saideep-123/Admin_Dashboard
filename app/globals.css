@@ -319,3 +319,64 @@ tbody tr:hover td{
 .skeletonTitle{height: 22px; width: 220px; border-radius: 10px; background: rgba(255,255,255,0.06); margin: 18px;}
 .skeletonLine{height: 14px; width: calc(100% - 36px); border-radius: 10px; background: rgba(255,255,255,0.06); margin: 10px 18px;}
 .empty{padding: 22px 10px; color: var(--muted); text-align:center;}
+/* ---------- Filter row refinements ---------- */
+
+/* Keep filters in one clean line on desktop */
+@media (min-width: 900px) {
+  .filtersRow {
+    flex-wrap: nowrap;
+    align-items: flex-end;
+  }
+
+  .filtersRow .field {
+    flex: 0 0 auto;
+  }
+
+  .filtersRow .field:first-child {
+    flex: 1 1 380px; /* Search gets more space */
+  }
+}
+
+/* Make date inputs compact */
+input[type="date"].input {
+  padding: 8px 10px;
+  font-size: 13px;
+  height: 38px;
+}
+
+/* Make select height match date input */
+select.input {
+  height: 38px;
+}
+
+/* Slightly smaller labels for filters */
+.fieldLabel {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* Customer name emphasis */
+.contactEmail {
+  font-weight: 600;
+  color: #eef1f6;
+}
+
+/* Items JSON cleaner */
+pre.json {
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* Table row hover polish */
+tbody tr:hover td {
+  background: linear-gradient(
+    90deg,
+    rgba(96,165,250,0.04),
+    rgba(45,212,191,0.04)
+  );
+}
+
+/* Count badge alignment */
+.countBadgeWrap {
+  align-self: center;
+}
