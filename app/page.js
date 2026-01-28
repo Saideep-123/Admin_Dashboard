@@ -9,12 +9,30 @@ const MAX_ROWS = 200;
 
 const STATUS_OPTIONS = ["all", "pending", "paid", "shipped", "cancelled"];
 
-function formatINR(value) {
-  const num = Number(value ?? 0);
+/* ===================== DATE HELPERS (LOCAL SAFE) ===================== */
+function localDateYYYYMMDD(d = new Date()) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function toISOStartOfDay(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0, 0).toISOString();
+}
+
+function toISOStartOfNextDay(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d + 1, 0, 0, 0, 0).toISOString();
+}
+
+/* ===================== FORMAT HELPERS ===================== */
+function formatINR(v) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
-  }).format(num);
+  }).format(Number(v ?? 0));
 }
 
 function shortId(id) {
@@ -22,41 +40,38 @@ function shortId(id) {
   return `${id.slice(0, 6)}…${id.slice(-4)}`;
 }
 
-function toISOStartOfDay(dateStr) {
-  return new Date(`${dateStr}T00:00:00`).toISOString();
-}
-
-function toISOStartOfNextDay(dateStr) {
-  const d = new Date(`${dateStr}T00:00:00`);
-  d.setDate(d.getDate() + 1);
-  return d.toISOString();
-}
-
 export default function Page() {
-  /* ---------------- AUTH ---------------- */
+  /* ===================== AUTH ===================== */
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  /* ---------------- DATA ---------------- */
+  /* ===================== DATA ===================== */
   const [orders, setOrders] = useState([]);
   const [fetching, setFetching] = useState(false);
   const [listening, setListening] = useState(false);
 
-  /* ---------------- FILTERS ---------------- */
+  /* ===================== FILTERS ===================== */
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const today = new Date().toISOString().slice(0, 10);
-  const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(today);
+  // ✅ DEFAULT = TODAY (LOCAL DATE)
+  const [fromDate, setFromDate] = useState(localDateYYYYMMDD());
+  const [toDate, setToDate] = useState(localDateYYYYMMDD());
 
-  /* ---------------- ERRORS ---------------- */
+  /* ===================== ERRORS ===================== */
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
 
   const channelRef = useRef(null);
 
-  /* ---------------- AUTH BOOTSTRAP ---------------- */
+  /* ===================== TODAY BUTTON ===================== */
+  const setToday = () => {
+    const t = localDateYYYYMMDD();
+    setFromDate(t);
+    setToDate(t);
+  };
+
+  /* ===================== AUTH BOOTSTRAP ===================== */
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
@@ -71,7 +86,7 @@ export default function Page() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  /* ---------------- FETCH ORDERS ---------------- */
+  /* ===================== FETCH ORDERS ===================== */
   const fetchOrders = async () => {
     if (!session?.user) return;
 
@@ -79,12 +94,10 @@ export default function Page() {
     setError("");
     setHint("");
 
-    let query = supabase
+    let q = supabase
       .from(ORDERS_SOURCE)
       .select(`
         id,
-        user_id,
-        address_id,
         status,
         total,
         notes,
@@ -93,21 +106,15 @@ export default function Page() {
           full_name,
           email,
           phone
-        ),
-        order_items!order_items_order_id_fkey (
-          id,
-          name,
-          price,
-          qty
         )
       `)
       .order("created_at", { ascending: false })
       .limit(MAX_ROWS);
 
-    if (fromDate) query = query.gte("created_at", toISOStartOfDay(fromDate));
-    if (toDate) query = query.lt("created_at", toISOStartOfNextDay(toDate));
+    if (fromDate) q = q.gte("created_at", toISOStartOfDay(fromDate));
+    if (toDate) q = q.lt("created_at", toISOStartOfNextDay(toDate));
 
-    const { data, error } = await query;
+    const { data, error } = await q;
 
     if (error) {
       setError(error.message);
@@ -120,21 +127,14 @@ export default function Page() {
     setFetching(false);
   };
 
-  /* ---------------- TODAY BUTTON ---------------- */
-  const setToday = () => {
-    const t = new Date().toISOString().slice(0, 10);
-    setFromDate(t);
-    setToDate(t);
-  };
-
-  /* ---------------- REFRESH ON DATE CHANGE (FIX) ---------------- */
+  /* ===================== REFRESH ON DATE CHANGE ===================== */
   useEffect(() => {
     if (!session?.user) return;
     fetchOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromDate, toDate, session?.user?.id]);
 
-  /* ---------------- REALTIME ---------------- */
+  /* ===================== REALTIME ===================== */
   useEffect(() => {
     if (!session?.user) return;
 
@@ -156,7 +156,7 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
 
-  /* ---------------- FILTERED VIEW ---------------- */
+  /* ===================== CLIENT FILTER ===================== */
   const filtered = useMemo(() => {
     return orders.filter((o) => {
       const statusOk =
@@ -166,12 +166,14 @@ export default function Page() {
     });
   }, [orders, search, statusFilter]);
 
-  /* ---------------- UI ---------------- */
-  if (authLoading) return <div style={{ padding: 40 }}>Loading…</div>;
+  const totalSales = useMemo(
+    () => filtered.reduce((s, o) => s + Number(o.total ?? 0), 0),
+    [filtered]
+  );
 
-  if (!session?.user) {
-    return <div style={{ padding: 40 }}>Login required</div>;
-  }
+  /* ===================== UI ===================== */
+  if (authLoading) return <div style={{ padding: 40 }}>Loading…</div>;
+  if (!session?.user) return <div style={{ padding: 40 }}>Login required</div>;
 
   return (
     <main className="page">
@@ -212,17 +214,19 @@ export default function Page() {
           onChange={(e) => setToDate(e.target.value)}
         />
 
-        <button className="btn" onClick={setToday}>
-          Today
-        </button>
-
+        <button className="btn" onClick={setToday}>Today</button>
         <button className="btn" onClick={fetchOrders} disabled={fetching}>
           Refresh
         </button>
       </div>
 
-      {error && <div className="errorBox">{error}</div>}
-      {hint && <div className="hintBox">{hint}</div>}
+      {/* Summary */}
+      <div className="summaryBar">
+        <div>Range: {fromDate} → {toDate}</div>
+        <div>Orders: {filtered.length}</div>
+        <div>Total: {formatINR(totalSales)}</div>
+        <div>{listening ? "Live" : "Offline"}</div>
+      </div>
 
       {/* Table */}
       <table className="table">
@@ -249,10 +253,6 @@ export default function Page() {
           ))}
         </tbody>
       </table>
-
-      <div style={{ marginTop: 10, fontSize: 12 }}>
-        {listening ? "Listening for updates…" : "Offline"}
-      </div>
     </main>
   );
 }
