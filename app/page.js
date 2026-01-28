@@ -87,6 +87,13 @@ export default function Page() {
   const [fromDate, setFromDate] = useState(todayStr);
   const [toDate, setToDate] = useState(todayStr);
 
+  // Today button handler
+  const setToday = () => {
+    const t = new Date().toISOString().slice(0, 10);
+    setFromDate(t);
+    setToDate(t);
+  };
+
   // Errors
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
@@ -202,7 +209,7 @@ export default function Page() {
         setError(e.message || "Failed to fetch orders.");
         if (isPermissionDenied(e)) {
           setHint(
-            "Permission denied. Add your Auth user UUID into admin_users and create SELECT policies for orders/addresses/order_items."
+            "Permission denied. Add your Auth user UUID into admin_users and create admin SELECT policies for orders/addresses/order_items."
           );
         }
         setOrders([]);
@@ -232,7 +239,6 @@ export default function Page() {
   const setupRealtime = async () => {
     await teardownRealtime();
 
-    // Subscribe to table changes
     const ch = supabase
       .channel(`orders-admin-${ORDERS_SCHEMA}-${ORDERS_SOURCE}`)
       .on(
@@ -295,7 +301,7 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
 
-  // Re-fetch when date range changes (so today filter updates instantly)
+  // Re-fetch when date range changes
   useEffect(() => {
     if (!session?.user) return;
     fetchOrders();
@@ -510,6 +516,14 @@ export default function Page() {
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
             />
+          </div>
+
+          {/* ✅ Today button */}
+          <div className="field" style={{ minWidth: 110 }}>
+            <div className="fieldLabel">&nbsp;</div>
+            <button type="button" className="btn btnGhost" onClick={setToday}>
+              Today
+            </button>
           </div>
 
           <div className="countBadgeWrap">
