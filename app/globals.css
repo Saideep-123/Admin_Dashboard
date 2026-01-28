@@ -380,3 +380,9 @@ tbody tr:hover td {
 .countBadgeWrap {
   align-self: center;
 }
+/* Today button alignment */
+.filtersRow .btn {
+  height: 38px;
+  padding: 8px 14px;
+  font-size: 13px;
+}
