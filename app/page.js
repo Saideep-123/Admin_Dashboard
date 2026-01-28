@@ -5,27 +5,10 @@ import { supabase } from "../lib/supabaseClient";
 
 // ✅ Change this ONE variable to switch source:
 // - "orders" (table) OR "admin_orders" (view)
-const ORDERS_SOURCE = "orders"; // or "admin_orders"
+// NOTE: Realtime works best on tables. If using a view, keep realtime on "orders".
+const ORDERS_SOURCE = "orders";
 const ORDERS_SCHEMA = "public";
 const MAX_ROWS = 200;
-// Date filter (YYYY-MM-DD)
-const todayStr = new Date().toISOString().slice(0, 10);
-const [fromDate, setFromDate] = useState(todayStr);
-const [toDate, setToDate] = useState(todayStr);
-
-function toISOStartOfDay(dateStr) {
-  // dateStr like "2026-01-29"
-  // Creates local start-of-day then converts to ISO
-  const d = new Date(`${dateStr}T00:00:00`);
-  return d.toISOString();
-}
-
-function toISOStartOfNextDay(dateStr) {
-  const d = new Date(`${dateStr}T00:00:00`);
-  d.setDate(d.getDate() + 1);
-  return d.toISOString();
-}
-
 
 const STATUS_OPTIONS = ["all", "pending", "paid", "shipped", "cancelled"];
 
@@ -70,6 +53,17 @@ function isPermissionDenied(err) {
   );
 }
 
+// Date helpers (for filtering)
+function toISOStartOfDay(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  return d.toISOString();
+}
+function toISOStartOfNextDay(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}
+
 export default function Page() {
   // Auth
   const [session, setSession] = useState(null);
@@ -84,9 +78,14 @@ export default function Page() {
   const [fetching, setFetching] = useState(false);
   const [listening, setListening] = useState(false);
 
-  // UI state
+  // Filters
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+
+  // Date filter (default = today)
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [fromDate, setFromDate] = useState(todayStr);
+  const [toDate, setToDate] = useState(todayStr);
 
   // Errors
   const [error, setError] = useState("");
@@ -118,24 +117,92 @@ export default function Page() {
     };
   }, []);
 
-  // -------- Fetch orders --------
+  // -------- Fetch one order with joins (used for realtime refresh) --------
+  async function fetchOneOrder(orderId) {
+    const { data, error: e } = await supabase
+      .from(ORDERS_SOURCE)
+      .select(
+        `
+        id,
+        user_id,
+        address_id,
+        currency,
+        status,
+        subtotal,
+        shipping,
+        total,
+        notes,
+        created_at,
+        addresses:address_id (
+          full_name,
+          email,
+          phone
+        ),
+        order_items (
+          id,
+          product_id,
+          name,
+          price,
+          qty
+        )
+      `
+      )
+      .eq("id", orderId)
+      .single();
+
+    if (e) return null;
+    return data;
+  }
+
+  // -------- Fetch orders (with joins + date filter) --------
   const fetchOrders = async () => {
     setError("");
     setHint("");
     setFetching(true);
 
     try {
-      const { data, error: e } = await supabase
+      let q = supabase
         .from(ORDERS_SOURCE)
-        .select("*")
+        .select(
+          `
+          id,
+          user_id,
+          address_id,
+          currency,
+          status,
+          subtotal,
+          shipping,
+          total,
+          notes,
+          created_at,
+          addresses:address_id (
+            full_name,
+            email,
+            phone
+          ),
+          order_items (
+            id,
+            product_id,
+            name,
+            price,
+            qty
+          )
+        `
+        )
         .order("created_at", { ascending: false })
         .limit(MAX_ROWS);
+
+      // Date filter (today by default)
+      if (fromDate) q = q.gte("created_at", toISOStartOfDay(fromDate));
+      if (toDate) q = q.lt("created_at", toISOStartOfNextDay(toDate));
+
+      const { data, error: e } = await q;
 
       if (e) {
         setError(e.message || "Failed to fetch orders.");
         if (isPermissionDenied(e)) {
           setHint(
-            "Permission denied. Make sure your user is in admin_users and RLS policies exist (see README)."
+            "Permission denied. Add your Auth user UUID into admin_users and create SELECT policies for orders/addresses/order_items."
           );
         }
         setOrders([]);
@@ -165,40 +232,45 @@ export default function Page() {
   const setupRealtime = async () => {
     await teardownRealtime();
 
+    // Subscribe to table changes
     const ch = supabase
       .channel(`orders-admin-${ORDERS_SCHEMA}-${ORDERS_SOURCE}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: ORDERS_SCHEMA, table: ORDERS_SOURCE },
-        (payload) => {
-          const newRow = payload.new;
-          if (!newRow) return;
+        async (payload) => {
+          const id = payload?.new?.id;
+          if (!id) return;
+
+          const fresh = await fetchOneOrder(id);
+          if (!fresh) return;
 
           setOrders((prev) => {
-            const exists = prev.some((o) => o.id === newRow.id);
-            if (exists) {
-              return prev.map((o) => (o.id === newRow.id ? newRow : o));
-            }
-            return [newRow, ...prev].slice(0, MAX_ROWS);
+            const exists = prev.some((o) => o.id === fresh.id);
+            if (exists) return prev.map((o) => (o.id === fresh.id ? fresh : o));
+            return [fresh, ...prev].slice(0, MAX_ROWS);
           });
         }
       )
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: ORDERS_SCHEMA, table: ORDERS_SOURCE },
-        (payload) => {
-          const updated = payload.new;
-          if (!updated) return;
-          setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+        async (payload) => {
+          const id = payload?.new?.id;
+          if (!id) return;
+
+          const fresh = await fetchOneOrder(id);
+          if (!fresh) return;
+
+          setOrders((prev) => prev.map((o) => (o.id === fresh.id ? fresh : o)));
         }
       )
       .on(
         "postgres_changes",
         { event: "DELETE", schema: ORDERS_SCHEMA, table: ORDERS_SOURCE },
         (payload) => {
-          const oldRow = payload.old;
-          const oldId = oldRow?.id;
-          if (oldId == null) return;
+          const oldId = payload?.old?.id;
+          if (!oldId) return;
           setOrders((prev) => prev.filter((o) => o.id !== oldId));
         }
       );
@@ -222,6 +294,13 @@ export default function Page() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
+
+  // Re-fetch when date range changes (so today filter updates instantly)
+  useEffect(() => {
+    if (!session?.user) return;
+    fetchOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromDate, toDate]);
 
   // -------- Login / Logout --------
   const signIn = async (e) => {
@@ -264,15 +343,23 @@ export default function Page() {
     const status = String(statusFilter || "all").toLowerCase();
 
     const match = (o) => {
-      const fields = [o?.id, o?.user_id, o?.email, o?.phone, o?.notes]
+      const searchable = [
+        o?.id,
+        o?.user_id,
+        o?.address_id,
+        o?.notes,
+        o?.addresses?.full_name,
+        o?.addresses?.email,
+        o?.addresses?.phone,
+      ]
         .map((v) => (v == null ? "" : String(v)))
         .join(" ")
         .toLowerCase();
 
       const statusOk =
         status === "all" ? true : String(o?.status || "").toLowerCase() === status;
-      const searchOk = !q ? true : fields.includes(q);
 
+      const searchOk = !q ? true : searchable.includes(q);
       return statusOk && searchOk;
     };
 
@@ -284,6 +371,7 @@ export default function Page() {
 
   const userEmail = session?.user?.email || "";
 
+  // -------- Render --------
   if (authLoading) {
     return (
       <main className="page">
@@ -341,8 +429,8 @@ export default function Page() {
               </button>
 
               <div className="helpText">
-                Uses Supabase Auth email/password. If login works but data fetch fails,
-                apply the RLS SQL in README.
+                If login works but data fetch fails: add your Auth user UUID into admin_users
+                and create admin SELECT policies for orders/addresses/order_items.
               </div>
             </form>
           </div>
@@ -353,6 +441,7 @@ export default function Page() {
 
   return (
     <main className="page">
+      {/* Top bar */}
       <header className="topbar">
         <div className="topbarLeft">
           <div className="title">Orders Dashboard</div>
@@ -375,6 +464,7 @@ export default function Page() {
         </div>
       </header>
 
+      {/* Filters */}
       <section className="filters card">
         <div className="filtersRow">
           <div className="field">
@@ -383,7 +473,7 @@ export default function Page() {
               className="input"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="id / email / phone / user_id / notes"
+              placeholder="id / name / email / phone / user_id / notes"
             />
           </div>
 
@@ -400,6 +490,26 @@ export default function Page() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="field" style={{ minWidth: 160 }}>
+            <div className="fieldLabel">From</div>
+            <input
+              type="date"
+              className="input"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+            />
+          </div>
+
+          <div className="field" style={{ minWidth: 160 }}>
+            <div className="fieldLabel">To</div>
+            <input
+              type="date"
+              className="input"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+            />
           </div>
 
           <div className="countBadgeWrap">
@@ -421,6 +531,7 @@ export default function Page() {
         )}
       </section>
 
+      {/* Table */}
       <section className="tableCard card">
         <div className="tableWrap">
           <table className="table">
@@ -429,6 +540,7 @@ export default function Page() {
                 <th>Created</th>
                 <th>Order ID</th>
                 <th>Status</th>
+                <th>Customer</th>
                 <th>User</th>
                 <th>Contact</th>
                 <th className="right">Total</th>
@@ -440,10 +552,7 @@ export default function Page() {
               {filtered.map((o) => {
                 const created = o?.created_at ? new Date(o.created_at) : null;
                 const createdText = created
-                  ? created.toLocaleString("en-IN", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })
+                  ? created.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
                   : "-";
 
                 return (
@@ -455,19 +564,29 @@ export default function Page() {
                         {String(o.status || "pending")}
                       </span>
                     </td>
-                    <td className="mono">{shortId(o.user_id)}</td>
+
                     <td>
                       <div className="contact">
-                        <div className="contactEmail">{o.email || "-"}</div>
-                        <div className="contactPhone mono muted">{o.phone || "-"}</div>
+                        <div className="contactEmail">{o.addresses?.full_name || "-"}</div>
                       </div>
                     </td>
+
+                    <td className="mono">{shortId(o.user_id)}</td>
+
+                    <td>
+                      <div className="contact">
+                        <div className="contactEmail">{o.addresses?.email || "-"}</div>
+                        <div className="contactPhone mono muted">{o.addresses?.phone || "-"}</div>
+                      </div>
+                    </td>
+
                     <td className="right mono">{formatINR(o.total)}</td>
+
                     <td>
                       <details className="details">
                         <summary className="detailsSummary">View</summary>
                         <pre className="json">
-{JSON.stringify(o.items ?? o.order_items ?? o.cart_items ?? {}, null, 2)}
+{JSON.stringify(o.order_items ?? [], null, 2)}
                         </pre>
                       </details>
                     </td>
@@ -477,7 +596,7 @@ export default function Page() {
 
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty">
+                  <td colSpan={8} className="empty">
                     No orders match the current filters.
                   </td>
                 </tr>
@@ -487,8 +606,7 @@ export default function Page() {
         </div>
 
         <div className="footerNote">
-          Source: <span className="mono">{ORDERS_SCHEMA}.{ORDERS_SOURCE}</span> •
-          Latest {MAX_ROWS} rows • Realtime enabled
+          Source: <span className="mono">{ORDERS_SCHEMA}.{ORDERS_SOURCE}</span> • Latest {MAX_ROWS} rows • Realtime enabled
         </div>
       </section>
     </main>
