@@ -8,6 +8,24 @@ import { supabase } from "../lib/supabaseClient";
 const ORDERS_SOURCE = "orders"; // or "admin_orders"
 const ORDERS_SCHEMA = "public";
 const MAX_ROWS = 200;
+// Date filter (YYYY-MM-DD)
+const todayStr = new Date().toISOString().slice(0, 10);
+const [fromDate, setFromDate] = useState(todayStr);
+const [toDate, setToDate] = useState(todayStr);
+
+function toISOStartOfDay(dateStr) {
+  // dateStr like "2026-01-29"
+  // Creates local start-of-day then converts to ISO
+  const d = new Date(`${dateStr}T00:00:00`);
+  return d.toISOString();
+}
+
+function toISOStartOfNextDay(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}
+
 
 const STATUS_OPTIONS = ["all", "pending", "paid", "shipped", "cancelled"];
 
