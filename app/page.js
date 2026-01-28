@@ -88,11 +88,18 @@ export default function Page() {
   const [toDate, setToDate] = useState(todayStr);
 
   // Today button handler
-  const setToday = () => {
-    const t = new Date().toISOString().slice(0, 10);
-    setFromDate(t);
-    setToDate(t);
-  };
+  const setToday = async () => {
+  const t = new Date().toISOString().slice(0, 10);
+  setFromDate(t);
+  setToDate(t);
+
+  // force refresh with the new dates
+  // (use a microtask so state updates apply first)
+  setTimeout(() => {
+    fetchOrders();
+  }, 0);
+};
+
 
   // Errors
   const [error, setError] = useState("");
