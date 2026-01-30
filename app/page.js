@@ -58,40 +58,33 @@ function isPermissionDenied(err) {
 
 /* ------------------ Page ------------------ */
 export default function Page() {
-  // Auth
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // Login form
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Data
   const [orders, setOrders] = useState([]);
   const [fetching, setFetching] = useState(false);
   const [listening, setListening] = useState(false);
 
-  // Filters
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [fromDate, setFromDate] = useState(localDateYYYYMMDD());
   const [toDate, setToDate] = useState(localDateYYYYMMDD());
 
-  // Errors
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
 
   const channelRef = useRef(null);
 
-  // Auth bootstrap (auto-login on refresh)
+  /* ---------------- AUTH ---------------- */
   useEffect(() => {
     let mounted = true;
 
     (async () => {
-      setAuthLoading(true);
-      const { data, error: e } = await supabase.auth.getSession();
+      const { data } = await supabase.auth.getSession();
       if (!mounted) return;
-      if (e) setError(e.message);
       setSession(data?.session ?? null);
       setAuthLoading(false);
     })();
@@ -106,14 +99,21 @@ export default function Page() {
     };
   }, []);
 
-  // Today button
+  /* 🔔 ASK NOTIFICATION PERMISSION */
+  useEffect(() => {
+    if (!session?.user) return;
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, [session?.user?.id]);
+
   const setToday = () => {
     const t = localDateYYYYMMDD();
     setFromDate(t);
     setToDate(t);
   };
 
-  // Fetch orders
+  /* ---------------- FETCH ---------------- */
   const fetchOrders = async () => {
     if (!session?.user) return;
 
@@ -148,34 +148,49 @@ export default function Page() {
     if (e) {
       setError(e.message || "Failed to fetch orders.");
       if (isPermissionDenied(e)) {
-        setHint(
-          "Permission denied: add your Auth user UUID into admin_users and create admin SELECT policies for orders/addresses."
-        );
+        setHint("Add your Auth user UUID into admin_users table.");
       }
       setOrders([]);
     } else {
-      setOrders(Array.isArray(data) ? data : []);
+      setOrders(data || []);
     }
 
     setFetching(false);
   };
 
-  // Refetch on date change (so Today works)
   useEffect(() => {
     if (!session?.user) return;
     fetchOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromDate, toDate, session?.user?.id]);
 
-  // Realtime
+  /* 🔔 REALTIME (INSERT only notification) */
   useEffect(() => {
     if (!session?.user) return;
 
     const ch = supabase
       .channel("orders-admin")
-      .on("postgres_changes", { event: "*", schema: ORDERS_SCHEMA, table: ORDERS_SOURCE }, () => {
-        fetchOrders();
-      })
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: ORDERS_SCHEMA, table: ORDERS_SOURCE },
+        (payload) => {
+          if (Notification.permission === "granted") {
+            new Notification("🛒 New Order Received", {
+              body: `Order ID: ${payload.new.id}`,
+            });
+          }
+          fetchOrders();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: ORDERS_SCHEMA, table: ORDERS_SOURCE },
+        fetchOrders
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: ORDERS_SCHEMA, table: ORDERS_SOURCE },
+        fetchOrders
+      )
       .subscribe((s) => setListening(s === "SUBSCRIBED"));
 
     channelRef.current = ch;
@@ -184,295 +199,95 @@ export default function Page() {
       supabase.removeChannel(ch);
       setListening(false);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
 
-  // Client-side filters
+  /* ---------------- FILTER ---------------- */
   const filtered = useMemo(() => {
-    const q = String(search || "").trim().toLowerCase();
-    const st = String(statusFilter || "all").toLowerCase();
-
+    const q = search.toLowerCase();
     return orders.filter((o) => {
-      const statusOk = st === "all" ? true : String(o.status || "").toLowerCase() === st;
-      const haystack = [
-        o?.id,
-        o?.notes,
-        o?.addresses?.full_name,
-        o?.addresses?.email,
-        o?.addresses?.phone,
-      ]
-        .map((v) => (v == null ? "" : String(v)))
-        .join(" ")
-        .toLowerCase();
-
-      const searchOk = !q ? true : haystack.includes(q);
-      return statusOk && searchOk;
+      const statusOk =
+        statusFilter === "all" ||
+        String(o.status).toLowerCase() === statusFilter;
+      const haystack = `${o.id} ${o.notes} ${o.addresses?.full_name} ${o.addresses?.email} ${o.addresses?.phone}`.toLowerCase();
+      return statusOk && (!q || haystack.includes(q));
     });
   }, [orders, search, statusFilter]);
 
   const totalSales = useMemo(
-    () => filtered.reduce((sum, o) => sum + Number(o?.total ?? 0), 0),
+    () => filtered.reduce((sum, o) => sum + Number(o.total || 0), 0),
     [filtered]
   );
 
-  // Login
+  /* ---------------- AUTH ACTIONS ---------------- */
   const signIn = async (e) => {
     e.preventDefault();
-    setError("");
-    setHint("");
-
-    const cleanEmail = String(email || "").trim();
-    if (!cleanEmail || !password) {
-      setError("Enter email and password.");
-      return;
-    }
-
-    const { data, error: e2 } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password,
-    });
-
-    if (e2) {
-      setError(e2.message);
-      return;
-    }
-
-    setSession(data?.session ?? null);
-    setPassword("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setError(error.message);
   };
 
-  // Logout
   const signOut = async () => {
-    setError("");
-    setHint("");
-    setOrders([]);
-    try {
-      if (channelRef.current) await supabase.removeChannel(channelRef.current);
-    } catch {}
-    channelRef.current = null;
     await supabase.auth.signOut();
     setSession(null);
+    setOrders([]);
   };
 
-  // UI
-  if (authLoading) {
-    return (
-      <main className="page">
-        <div className="card" style={{ maxWidth: 520, margin: "64px auto", padding: 18 }}>
-          Loading…
-        </div>
-      </main>
-    );
-  }
+  /* ---------------- UI ---------------- */
+  if (authLoading) return <div className="page">Loading…</div>;
 
-  // ✅ LOGIN SCREEN (shows email + password fields)
   if (!session?.user) {
     return (
-      <main className="page">
-        <div className="loginWrap">
-          <div className="loginHero">
-            <div className="loginHeroInner">
-              <div className="brandRow">
-                <div className="brandDot" />
-                <div>
-                  <div className="brandTitle">Orders Dashboard</div>
-                  <div className="brandSub">Admin login</div>
-                </div>
-              </div>
-              <div className="loginHint">
-                Login with the email/password created in Supabase Auth.
-                <br />
-                Then add your Auth user UUID into <span className="mono">admin_users</span>.
-              </div>
-            </div>
-          </div>
-
-          <div className="card loginCard">
-            <form onSubmit={signIn} className="form">
-              <label className="label">
-                Email
-                <input
-                  className="input"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
-                  autoComplete="email"
-                />
-              </label>
-
-              <label className="label">
-                Password
-                <input
-                  className="input"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                />
-              </label>
-
-              {error ? <div className="errorBox">{error}</div> : null}
-              {hint ? <div className="hintBox">{hint}</div> : null}
-
-              <button className="btn btnPrimary" type="submit">
-                Sign in
-              </button>
-
-              <div className="helpText">
-                If you can login but see no orders: add admin SELECT policies and insert your UUID in admin_users.
-              </div>
-            </form>
-          </div>
-        </div>
+      <main className="page loginWrap">
+        <form onSubmit={signIn} className="loginCard">
+          <h2>Admin Login</h2>
+          <input className="input" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input className="input" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          {error && <div className="errorBox">{error}</div>}
+          <button className="btn btnPrimary">Sign in</button>
+        </form>
       </main>
     );
   }
-
-  const userEmail = session?.user?.email || "";
 
   return (
     <main className="page">
       <header className="topbar">
-        <div className="topbarLeft">
-          <div className="title">Orders Dashboard</div>
-          <div className="subtitle">
-            <span className="muted">{userEmail}</span>
-            <span className="dotSep">•</span>
-            <span className={listening ? "live liveOn" : "live liveOff"}>
-              {listening ? "Listening…" : "Offline"}
-            </span>
-          </div>
+        <div>
+          <h1>Orders Dashboard</h1>
+          <span>{session.user.email}</span> •{" "}
+          <span>{listening ? "Listening…" : "Offline"}</span>
         </div>
-
-        <div className="topbarRight">
-          <button className="btn" onClick={fetchOrders} disabled={fetching}>
-            {fetching ? "Refreshing…" : "Refresh"}
-          </button>
-          <button className="btn btnGhost" onClick={signOut}>
-            Sign out
-          </button>
-        </div>
+        <button onClick={signOut}>Sign out</button>
       </header>
 
-      <section className="filters card">
-        <div className="filtersRow">
-          <div className="field grow">
-            <div className="fieldLabel">Search</div>
-            <input
-              className="input"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="id / name / email / phone / notes"
-            />
-          </div>
-
-          <div className="field" style={{ minWidth: 200 }}>
-            <div className="fieldLabel">Status</div>
-            <select
-              className="input select"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s === "all" ? "All statuses" : s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="field" style={{ minWidth: 160 }}>
-            <div className="fieldLabel">From</div>
-            <input
-              type="date"
-              className="input"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-            />
-          </div>
-
-          <div className="field" style={{ minWidth: 160 }}>
-            <div className="fieldLabel">To</div>
-            <input
-              type="date"
-              className="input"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-            />
-          </div>
-
-          <div className="field" style={{ minWidth: 110 }}>
-            <div className="fieldLabel">&nbsp;</div>
-            <button type="button" className="btn btnGhost" onClick={setToday}>
-              Today
-            </button>
-          </div>
-        </div>
-
-        {(error || hint) && (
-          <div className="msgRow">
-            {error ? <div className="errorBox" style={{ margin: 0 }}>{error}</div> : null}
-            {hint ? <div className="hintBox">{hint}</div> : null}
-          </div>
-        )}
-      </section>
-
-      <section className="tableCard card">
-        <div className="tableWrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Created</th>
-                <th>Order</th>
-                <th>Status</th>
-                <th>Customer</th>
-                <th>Contact</th>
-                <th className="right">Total</th>
-                <th>Notes</th>
+      <section className="tableCard">
+        <table>
+          <thead>
+            <tr>
+              <th>Created</th>
+              <th>Order</th>
+              <th>Status</th>
+              <th>Customer</th>
+              <th>Contact</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((o) => (
+              <tr key={o.id}>
+                <td>{new Date(o.created_at).toLocaleString()}</td>
+                <td>{shortId(o.id)}</td>
+                <td>{o.status}</td>
+                <td>{o.addresses?.full_name}</td>
+                <td>{o.addresses?.phone}</td>
+                <td>{formatINR(o.total)}</td>
               </tr>
-            </thead>
+            ))}
+          </tbody>
+        </table>
 
-            <tbody>
-              {filtered.map((o) => {
-                const created = o?.created_at ? new Date(o.created_at) : null;
-                const createdText = created
-                  ? created.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
-                  : "-";
-
-                return (
-                  <tr key={o.id}>
-                    <td className="mono muted">{createdText}</td>
-                    <td className="mono">{shortId(o.id)}</td>
-                    <td>
-                      <span className={statusClass(o.status)}>{o.status || "pending"}</span>
-                    </td>
-                    <td>{o.addresses?.full_name || "-"}</td>
-                    <td className="mono muted">{o.addresses?.phone || "-"}</td>
-                    <td className="right mono">{formatINR(o.total)}</td>
-                    <td className="muted">{o.notes || "-"}</td>
-                  </tr>
-                );
-              })}
-
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="empty">No orders found.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Bottom line: only orders count + total */}
         <div className="bottomLine">
-          <div className="bottomItem">
-            Orders: <b>{filtered.length}</b>
-          </div>
-          <div className="bottomItem mono">
-            Total: <b>{formatINR(totalSales)}</b>
-          </div>
+          <div>Orders: {filtered.length}</div>
+          <div>Total: {formatINR(totalSales)}</div>
         </div>
       </section>
     </main>
