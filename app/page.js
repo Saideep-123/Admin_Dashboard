@@ -1,5 +1,4 @@
 "use client";
-<h1>Orders Dashboard v2</h1>
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -173,7 +172,8 @@ export default function Page() {
           gap: 12,
         }}
       >
-        <h1>Orders Dashboard</h1>
+        <h1>Orders Dashboard v2</h1>
+
 
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn" onClick={fetchOrders} disabled={loading}>
