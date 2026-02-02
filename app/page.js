@@ -8,9 +8,12 @@ const MAX_ROWS = 200;
 
 export default function Page() {
   const router = useRouter();
+
   const [session, setSession] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+
   const channelRef = useRef(null);
 
   /* ---------- AUTH ---------- */
@@ -48,25 +51,16 @@ export default function Page() {
     fetchOrders();
   }, [session]);
 
-  /* ---------- REALTIME ---------- */
+  /* ---------- REALTIME (DATA ONLY) ---------- */
   useEffect(() => {
     if (!session) return;
-
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
 
     const ch = supabase
       .channel("orders-live")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "orders" },
-        (payload) => {
-          if (Notification.permission === "granted") {
-            new Notification("🛒 New Order Received", {
-              body: `Order ${payload.new.id}`,
-            });
-          }
+        () => {
           fetchOrders();
         }
       )
@@ -76,22 +70,69 @@ export default function Page() {
     return () => supabase.removeChannel(ch);
   }, [session]);
 
+  /* ---------- PUSH SUBSCRIPTION (MOBILE) ---------- */
+  const enablePushNotifications = async () => {
+    if (!("serviceWorker" in navigator)) {
+      alert("Service workers not supported");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      alert("Notification permission denied");
+      return;
+    }
+
+    const reg = await navigator.serviceWorker.ready;
+
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+    });
+
+    const json = sub.toJSON();
+
+    await supabase.from("push_subscriptions").insert({
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+    });
+
+    setPushEnabled(true);
+    alert("✅ Notifications enabled on this device");
+  };
+
   if (!session) return <div className="page">Login required</div>;
 
   return (
     <main className="page">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
         <h1>Orders Dashboard</h1>
 
-        <button
-          className="btn"
-          onClick={fetchOrders}
-          disabled={loading}
-        >
-          {loading ? "Refreshing..." : "🔄 Refresh"}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" onClick={fetchOrders} disabled={loading}>
+            {loading ? "Refreshing..." : "🔄 Refresh"}
+          </button>
+
+          <button
+            className="btn"
+            onClick={enablePushNotifications}
+            disabled={pushEnabled}
+          >
+            {pushEnabled ? "🔔 Enabled" : "🔔 Enable Notifications"}
+          </button>
+        </div>
       </div>
 
+      {/* Orders Table */}
       <table className="table">
         <thead>
           <tr>
