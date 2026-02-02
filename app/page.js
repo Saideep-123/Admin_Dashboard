@@ -33,12 +33,14 @@ export default function Page() {
 
     const { data } = await supabase
       .from("orders")
-      .select(`
+      .select(
+        `
         id, status, total, created_at,
         addresses (
           full_name, phone
         )
-      `)
+      `
+      )
       .order("created_at", { ascending: false })
       .limit(MAX_ROWS);
 
@@ -70,7 +72,7 @@ export default function Page() {
     return () => supabase.removeChannel(ch);
   }, [session]);
 
-  /* ---------- PUSH SUBSCRIPTION (MOBILE) ---------- */
+  /* ---------- PUSH SUBSCRIPTION ---------- */
   const enablePushNotifications = async () => {
     if (!("serviceWorker" in navigator)) {
       alert("Service workers not supported");
@@ -102,26 +104,66 @@ export default function Page() {
     alert("✅ Notifications enabled on this device");
   };
 
+  /* ---------- LOGIN UI (EMAIL + PASSWORD) ---------- */
   if (!session) {
-  return (
-    <main className="page" style={{ textAlign: "center", marginTop: 80 }}>
-      <h2>Admin Login</h2>
-      <p>Please log in to view orders</p>
-
-      <button
-        className="btn"
-        onClick={() => supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo: window.location.origin }
-        })}
+    return (
+      <main
+        className="page"
+        style={{
+          maxWidth: 360,
+          margin: "80px auto",
+          textAlign: "center",
+        }}
       >
-        Login with Google
-      </button>
-    </main>
-  );
-}
+        <h2>Admin Login</h2>
+        <p>Please log in to view orders</p>
 
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
 
+            const email = e.target.email.value;
+            const password = e.target.password.value;
+
+            const { error } = await supabase.auth.signInWithPassword({
+              email,
+              password,
+            });
+
+            if (error) {
+              alert(error.message);
+            }
+          }}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            marginTop: 20,
+          }}
+        >
+          <input
+            name="email"
+            type="email"
+            placeholder="Email"
+            required
+          />
+
+          <input
+            name="password"
+            type="password"
+            placeholder="Password"
+            required
+          />
+
+          <button className="btn" type="submit">
+            Login
+          </button>
+        </form>
+      </main>
+    );
+  }
+
+  /* ---------- DASHBOARD ---------- */
   return (
     <main className="page">
       {/* Header */}
