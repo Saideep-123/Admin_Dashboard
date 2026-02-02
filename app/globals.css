@@ -386,3 +386,11 @@ tbody tr:hover td {
   padding: 8px 14px;
   font-size: 13px;
 }
+
+.clickRow {
+  cursor: pointer;
+}
+.clickRow:hover {
+  background: rgba(255,255,255,0.05);
+}
+
