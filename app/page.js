@@ -102,7 +102,25 @@ export default function Page() {
     alert("✅ Notifications enabled on this device");
   };
 
-  if (!session) return <div className="page">Login required</div>;
+  if (!session) {
+  return (
+    <main className="page" style={{ textAlign: "center", marginTop: 80 }}>
+      <h2>Admin Login</h2>
+      <p>Please log in to view orders</p>
+
+      <button
+        className="btn"
+        onClick={() => supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo: window.location.origin }
+        })}
+      >
+        Login with Google
+      </button>
+    </main>
+  );
+}
+
 
   return (
     <main className="page">
