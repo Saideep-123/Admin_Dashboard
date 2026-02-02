@@ -104,11 +104,15 @@ export default function Page() {
 
       const json = sub.toJSON();
 
-      const { error } = await supabase.from("push_subscriptions").insert({
-        endpoint: json.endpoint,
-        p256dh: json.keys.p256dh,
-        auth: json.keys.auth,
-      });
+      const { error } = await supabase.from("push_subscriptions").upsert(
+  {
+    endpoint: json.endpoint,
+    p256dh: json.keys.p256dh,
+    auth: json.keys.auth,
+  },
+  { onConflict: "endpoint" }
+);
+
 
       if (error) {
         alert(error.message);
