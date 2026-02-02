@@ -13,7 +13,18 @@ export default function RootLayout({ children }) {
         <meta name="theme-color" content="#0b0c0f" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body>{children}</body>
+      <body>{children} <script
+  dangerouslySetInnerHTML={{
+    __html: `
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/service-worker.js");
+        });
+      }
+    `
+  }}
+/>
+</body>
     </html>
   );
 }
