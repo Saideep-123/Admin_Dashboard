@@ -6,7 +6,7 @@ import { supabase } from "../lib/supabaseClient";
 
 const MAX_ROWS = 200;
 
-/* ---------- HELPERS ---------- */
+/* ---------- HELPER ---------- */
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding)
@@ -27,8 +27,6 @@ export default function Page() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
-
-  const channelRef = useRef(null);
 
   /* ---------- AUTH ---------- */
   useEffect(() => {
@@ -68,24 +66,7 @@ export default function Page() {
     if (session) fetchOrders();
   }, [session]);
 
-  /* ---------- REALTIME (DATA REFRESH ONLY) ---------- */
-  useEffect(() => {
-    if (!session) return;
-
-    const ch = supabase
-      .channel("orders-live")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "orders" },
-        () => fetchOrders()
-      )
-      .subscribe();
-
-    channelRef.current = ch;
-    return () => supabase.removeChannel(ch);
-  }, [session]);
-
-  /* ---------- PUSH NOTIFICATIONS (FIXED) ---------- */
+  /* ---------- PUSH ---------- */
   const enablePushNotifications = async () => {
     try {
       if (!("serviceWorker" in navigator)) {
@@ -99,28 +80,22 @@ export default function Page() {
         return;
       }
 
-      // ✅ wait for SW
-      const reg = await navigator.serviceWorker.ready;
-
-      // ✅ REQUIRED for iOS
-      if (!navigator.serviceWorker.controller) {
-        alert("Please close the app and reopen it, then try again.");
-        return;
-      }
-
       const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!publicKey) {
         alert("Missing NEXT_PUBLIC_VAPID_PUBLIC_KEY");
         return;
       }
 
-      // ✅ reuse subscription if exists
+      const reg = await navigator.serviceWorker.ready;
+
+      if (!navigator.serviceWorker.controller) {
+        alert("Please close the app and reopen it, then try again.");
+        return;
+      }
+
       let sub = await reg.pushManager.getSubscription();
-
       if (!sub) {
-        // iOS timing fix
         await new Promise((r) => setTimeout(r, 500));
-
         sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(publicKey),
@@ -129,7 +104,6 @@ export default function Page() {
 
       const json = sub.toJSON();
 
-      // ✅ SIMPLE INSERT (confirmed working)
       const { error } = await supabase.from("push_subscriptions").insert({
         endpoint: json.endpoint,
         p256dh: json.keys.p256dh,
@@ -137,14 +111,14 @@ export default function Page() {
       });
 
       if (error) {
-        alert("DB error: " + error.message);
+        alert(error.message);
         return;
       }
 
       setPushEnabled(true);
       alert("✅ Notifications enabled on this device");
     } catch (e) {
-      alert("Enable notifications failed: " + (e?.message || e));
+      alert("Enable notifications failed");
     }
   };
 
@@ -156,7 +130,6 @@ export default function Page() {
         style={{ maxWidth: 360, margin: "80px auto", textAlign: "center" }}
       >
         <h2>Admin Login</h2>
-        <p>Please log in to view orders</p>
 
         <form
           onSubmit={async (e) => {
@@ -220,7 +193,13 @@ export default function Page() {
         </div>
       </div>
 
-      <table className="table">
+      {/* 🔍 STEP 5: VAPID VISIBILITY CHECK */}
+      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
+        VAPID key present:{" "}
+        {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ? "YES" : "NO"}
+      </div>
+
+      <table className="table" style={{ marginTop: 12 }}>
         <thead>
           <tr>
             <th>Date</th>
