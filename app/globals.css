@@ -149,3 +149,9 @@ body {
     display: block;
   }
 }
+body {
+  background:
+    radial-gradient(800px 400px at 10% 0%, rgba(0,0,0,0.04), transparent),
+    radial-gradient(800px 400px at 90% 10%, rgba(0,0,0,0.04), transparent),
+    #f7f7f7;
+}
