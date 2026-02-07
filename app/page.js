@@ -62,7 +62,7 @@ export default function Page() {
             placeholder="Password"
             required
           />
-          <button className="btn">Login</button>
+          <button>Login</button>
         </form>
       </main>
     );
@@ -72,33 +72,22 @@ export default function Page() {
 
   return (
     <main className="page">
-      <div className="topbar">
-        <h1 className="title">Orders Dashboard</h1>
-        <div className="actions">
-          <button className="btn secondary" onClick={() => fetchOrders()}>
-            Refresh
-          </button>
-          <button className="btn" onClick={() => supabase.auth.signOut()}>
-            Logout
-          </button>
-        </div>
+      <h1>Orders Dashboard</h1>
+
+      {/* Summary */}
+      <div style={{ marginBottom: 16 }}>
+        <strong>Total Orders:</strong> {orders.length} &nbsp;|&nbsp;
+        <strong>Total Sales:</strong> {money(totalSales)}
       </div>
 
-      <div className="kpi-grid">
-        <div className="card kpi">
-          <h3>Total Orders</h3>
-          <strong>{orders.length}</strong>
-        </div>
-        <div className="card kpi">
-          <h3>Total Sales</h3>
-          <strong>{money(totalSales)}</strong>
-        </div>
-      </div>
-
-      <div className="filters">
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      {/* Filters */}
+      <div style={{ marginBottom: 16 }}>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
         <button
-          className="btn secondary"
           onClick={() => {
             const t = todayISO();
             setDate(t);
@@ -107,9 +96,8 @@ export default function Page() {
         >
           Today
         </button>
-        <button className="btn" onClick={() => fetchOrders(date)}>
-          Apply
-        </button>
+        <button onClick={() => fetchOrders(date)}>Apply</button>
+        <button onClick={() => fetchOrders()}>Reset</button>
       </div>
 
       {/* Desktop table */}
@@ -126,8 +114,8 @@ export default function Page() {
           {orders.map((o) => (
             <tr
               key={o.id}
-              className="clickRow"
               onClick={() => router.push(`/orders/${o.id}`)}
+              style={{ cursor: "pointer" }}
             >
               <td>{new Date(o.created_at).toLocaleDateString()}</td>
               <td>{o.id.slice(0, 8)}</td>
