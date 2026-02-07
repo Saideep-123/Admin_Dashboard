@@ -74,13 +74,19 @@ export default function Page() {
     <main className="page">
       <h1>Orders Dashboard</h1>
 
-      {/* Summary */}
-      <div style={{ marginBottom: 16 }}>
+      {/* Old-style top controls */}
+      <div style={{ marginBottom: 12 }}>
+        <button onClick={() => fetchOrders()}>Refresh</button>
+        <button onClick={() => supabase.auth.signOut()}>Logout</button>
+      </div>
+
+      {/* New summary (simple text, not cards) */}
+      <div style={{ marginBottom: 12 }}>
         <strong>Total Orders:</strong> {orders.length} &nbsp;|&nbsp;
         <strong>Total Sales:</strong> {money(totalSales)}
       </div>
 
-      {/* Filters */}
+      {/* Date filter */}
       <div style={{ marginBottom: 16 }}>
         <input
           type="date"
@@ -97,10 +103,8 @@ export default function Page() {
           Today
         </button>
         <button onClick={() => fetchOrders(date)}>Apply</button>
-        <button onClick={() => fetchOrders()}>Reset</button>
       </div>
 
-      {/* Desktop table */}
       <table className="table">
         <thead>
           <tr>
@@ -125,21 +129,6 @@ export default function Page() {
           ))}
         </tbody>
       </table>
-
-      {/* Mobile cards */}
-      <div className="mobile-list">
-        {orders.map((o) => (
-          <div
-            key={o.id}
-            className="card order-card"
-            onClick={() => router.push(`/orders/${o.id}`)}
-          >
-            <strong>{o.addresses?.full_name}</strong>
-            <div>{money(o.total)}</div>
-            <small>{new Date(o.created_at).toLocaleDateString()}</small>
-          </div>
-        ))}
-      </div>
     </main>
   );
 }
