@@ -5,7 +5,7 @@
 body {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont;
-  background: #f5f5f5;
+  background: #f5f5f5; /* old neutral background */
   color: #1f2937;
 }
 
@@ -19,7 +19,7 @@ body {
 .table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
+  background: #ffffff;
 }
 
 .table th {
@@ -34,8 +34,32 @@ body {
   border-top: 1px solid rgba(0,0,0,0.08);
 }
 
+/* Buttons */
 button {
   padding: 8px 14px;
   margin-right: 8px;
   cursor: pointer;
+}
+
+/* Mobile cards */
+.mobile-list {
+  display: none;
+}
+
+.order-card {
+  background: #fff;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(0,0,0,0.08);
+}
+
+/* Responsive */
+@media (max-width: 720px) {
+  .table {
+    display: none;
+  }
+
+  .mobile-list {
+    display: block;
+  }
 }
