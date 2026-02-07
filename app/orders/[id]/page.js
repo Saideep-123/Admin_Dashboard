@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 
-const money = (n) => `$${Number(n || 0).toFixed(2)}`;
-
-export default function OrderDetails() {
+export default function OrderDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
   const [order, setOrder] = useState(null);
@@ -14,41 +12,71 @@ export default function OrderDetails() {
 
   useEffect(() => {
     const load = async () => {
-      const { data: o } = await supabase
+      const { data: orderData } = await supabase
         .from("orders")
-        .select("*, addresses(*)")
+        .select(`
+          *,
+          addresses (*)
+        `)
         .eq("id", id)
         .single();
 
-      const { data: i } = await supabase
+      const { data: itemData } = await supabase
         .from("order_items")
         .select("*")
         .eq("order_id", id);
 
-      setOrder(o);
-      setItems(i || []);
+      setOrder(orderData);
+      setItems(itemData || []);
     };
+
     load();
   }, [id]);
 
-  if (!order) return <main className="page">Loading…</main>;
+  if (!order) return <div className="page">Loading…</div>;
 
   return (
     <main className="page">
-      <button onClick={() => router.back()}>← Back</button>
+      <button className="btn" onClick={() => router.back()}>
+        ← Back
+      </button>
 
-      <h2>Customer</h2>
-      <p>{order.addresses?.full_name}</p>
-      <p>{order.addresses?.phone}</p>
+      <h2>Order Details</h2>
 
-      <h2>Items</h2>
-      {items.map((i) => (
-        <p key={i.id}>
-          {i.name} × {i.qty} — {money(i.price * i.qty)}
-        </p>
-      ))}
+      <div className="card">
+        <p><b>Order ID:</b> {order.id}</p>
+        <p><b>Name:</b> {order.addresses?.full_name}</p>
+        <p><b>Phone:</b> {order.addresses?.phone}</p>
+        <p><b>Address:</b> {order.addresses?.address_line1}</p>
+      </div>
 
-      <h2>Total: {money(order.total)}</h2>
+      <table className="table" style={{ marginTop: 20 }}>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Price</th>
+            <th>Qty</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {items.map((i) => (
+            <tr key={i.id}>
+              <td>{i.name}</td>
+              <td>₹{i.price}</td>
+              <td>{i.qty}</td>
+              <td>₹{i.price * i.qty}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="card" style={{ marginTop: 20 }}>
+        <p><b>Subtotal:</b> ₹{order.subtotal}</p>
+        <p><b>Shipping:</b> ₹{order.shipping}</p>
+        <p><b>Total:</b> ₹{order.total}</p>
+      </div>
     </main>
   );
 }
