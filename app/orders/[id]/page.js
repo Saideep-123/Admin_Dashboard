@@ -35,28 +35,20 @@ export default function OrderDetails() {
 
   return (
     <main className="page">
-      <button className="btn secondary" onClick={() => router.back()}>
-        ← Back
-      </button>
+      <button onClick={() => router.back()}>← Back</button>
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <h3>Customer</h3>
-        <p>{order.addresses?.full_name}</p>
-        <p>{order.addresses?.phone}</p>
-      </div>
+      <h2>Customer</h2>
+      <p>{order.addresses?.full_name}</p>
+      <p>{order.addresses?.phone}</p>
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <h3>Items</h3>
-        {items.map((i) => (
-          <p key={i.id}>
-            {i.name} × {i.qty} — {money(i.price * i.qty)}
-          </p>
-        ))}
-      </div>
+      <h2>Items</h2>
+      {items.map((i) => (
+        <p key={i.id}>
+          {i.name} × {i.qty} — {money(i.price * i.qty)}
+        </p>
+      ))}
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <strong>Total: {money(order.total)}</strong>
-      </div>
+      <h2>Total: {money(order.total)}</h2>
     </main>
   );
 }
