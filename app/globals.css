@@ -1,109 +1,21 @@
-:root {
-  /* Keep variables (safe for components) */
-  --bg: #ffffff;
-  --card: #ffffff;
-  --text: #1f2937;
-  --muted: #6b7280;
-
-  --gold: #c9a45c;
-  --green: #1f3a2a;
-
-  --border: rgba(0, 0, 0, 0.08);
-  --shadow: 0 10px 25px rgba(0,0,0,0.08);
-}
-
 * {
   box-sizing: border-box;
 }
 
-/* OLD UI BACKGROUND RESTORED */
 body {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont;
-  color: var(--text);
-  background: #f5f5f5; /* simple neutral background */
+  background: #f5f5f5;
+  color: #1f2937;
 }
 
-/* Layout */
 .page {
   max-width: 1100px;
   margin: auto;
   padding: 20px 16px 40px;
 }
 
-/* Header */
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.title {
-  font-size: 26px;
-  font-weight: 800;
-}
-
-.actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-/* Buttons (old style) */
-.btn {
-  background: var(--green);
-  color: #fff;
-  border: none;
-  padding: 8px 14px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.btn.secondary {
-  background: transparent;
-  color: var(--green);
-  border: 1px solid var(--border);
-}
-
-/* Cards */
-.card {
-  background: var(--card);
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  padding: 14px;
-}
-
-/* KPIs */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.kpi h3 {
-  margin: 0;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.kpi strong {
-  font-size: 22px;
-  color: var(--text);
-}
-
-/* Filters */
-.filters {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
-/* Table (desktop) */
+/* Table */
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -113,34 +25,17 @@ body {
 .table th {
   text-align: left;
   font-size: 13px;
-  color: var(--muted);
+  color: #6b7280;
   padding: 10px 8px;
 }
 
 .table td {
   padding: 12px 8px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid rgba(0,0,0,0.08);
 }
 
-.clickRow {
+button {
+  padding: 8px 14px;
+  margin-right: 8px;
   cursor: pointer;
-}
-
-/* Mobile cards */
-.mobile-list {
-  display: none;
-}
-
-.order-card {
-  margin-bottom: 12px;
-}
-
-/* Responsive */
-@media (max-width: 720px) {
-  .table {
-    display: none;
-  }
-  .mobile-list {
-    display: block;
-  }
 }
